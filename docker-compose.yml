@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  fontforge:
+    build: .
+    volumes:
+      - ./input:/input:ro
+      - ./output:/output
+    command: python3 build.py /input /output
