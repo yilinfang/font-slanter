@@ -16,4 +16,4 @@ COPY build.py /workspace/
 RUN chmod +x /workspace/make-italic.py /workspace/build.py
 
 # Default command
-CMD ["python3", "build.py", "/input", "/output"]
+CMD ["python3", "build.py", "--input", "/input", "--output", "/output"]

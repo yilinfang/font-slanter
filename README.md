@@ -18,7 +18,13 @@ _**or**_
 ### Using FontForge and Python
 
 ```bash
-python3 build.py <input_dir> <output_dir>
+python3 build.py --input <input_dir> --output <output_dir> [--angle DEGREES]
+```
+
+Example with a custom slant angle:
+
+```bash
+python3 build.py --input ./input --output ./output --angle 12
 ```
 
 ### Using Docker Compose (recommended)
@@ -26,4 +32,10 @@ python3 build.py <input_dir> <output_dir>
 ```bash
 # Put your fonts in the `input` directory, and the generated fonts will be in the `output` directory.
 docker-compose up
+```
+
+To use a custom angle, override the command:
+
+```bash
+docker-compose run fontforge python3 build.py --input /input --output /output --angle 12
 ```

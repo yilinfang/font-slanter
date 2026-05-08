@@ -4,4 +4,4 @@ services:
     volumes:
       - ./input:/input:ro
       - ./output:/output
-    command: python3 build.py /input /output
+    command: python3 build.py --input /input --output /output --angle 9

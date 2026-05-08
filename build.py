@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-import sys
+import argparse
 import subprocess
+import sys
 from pathlib import Path
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: python3 build.py <input_dir> <output_dir>")
-        print("Example: python3 build.py ./static ./static/italic")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Generate italic versions of TTF fonts"
+    )
+    parser.add_argument(
+        "--input", required=True, help="Directory containing input TTF files"
+    )
+    parser.add_argument(
+        "--output", required=True, help="Directory for generated italic fonts"
+    )
+    parser.add_argument(
+        "--angle", type=float, default=9, help="Slant angle in degrees (default: 9)"
+    )
+    args = parser.parse_args()
 
-    input_dir = Path(sys.argv[1])
-    output_dir = Path(sys.argv[2])
+    input_dir = Path(args.input)
+    output_dir = Path(args.output)
 
-    # Validate input directory
     if not input_dir.exists():
         print(f"Error: Input directory does not exist: {input_dir}")
         sys.exit(1)
@@ -22,16 +31,13 @@ def main():
         print(f"Error: Input path is not a directory: {input_dir}")
         sys.exit(1)
 
-    # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find make-italic.py script
     script_path = Path(__file__).parent / "make-italic.py"
     if not script_path.exists():
         print(f"Error: make-italic.py not found at: {script_path}")
         sys.exit(1)
 
-    # Find all TTF files
     ttf_files = sorted(input_dir.glob("*.ttf"))
 
     if not ttf_files:
@@ -43,6 +49,7 @@ def main():
     print("=" * 60)
     print(f"Input:  {input_dir.resolve()}")
     print(f"Output: {output_dir.resolve()}")
+    print(f"Angle:  {args.angle}°")
     print(f"Found {len(ttf_files)} font(s)")
     print()
 
@@ -50,21 +57,23 @@ def main():
     fail_count = 0
 
     for input_file in ttf_files:
-        # Generate output filename
         output_filename = input_file.stem + "-Italic.ttf"
         output_file = output_dir / output_filename
 
         print(f"Processing: {input_file.name}")
 
-        # Run fontforge with make-italic.py
         try:
             result = subprocess.run(
                 [
                     "fontforge",
                     "-script",
                     str(script_path),
+                    "--input",
                     str(input_file),
+                    "--output",
                     str(output_file),
+                    "--angle",
+                    str(args.angle),
                 ],
                 capture_output=True,
                 text=True,
