@@ -1,11 +1,4 @@
-input/**
-!input/.gitkeep
-output/**
-!output/.gitkeep
-
-tmp/
-
-__pycache__/
-*.pyc
-
-*.DS_Store
+**/tmp/
+**/__pycache__/
+**/*.pyc
+**/*.DS_Store
