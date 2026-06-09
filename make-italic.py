@@ -15,12 +15,18 @@ parser.add_argument(
     "--width",
     type=int,
     default=None,
-    help="Normalize advance widths: narrow glyphs to N, full-width (CJK) glyphs to 2*N",
+    help="Normalize full-width (CJK) advances to 2*N to match a primary mono cell of N; non-CJK glyphs are left unchanged",
 )
 parser.add_argument(
     "--no-slant",
     action="store_true",
     help="Skip slanting and emit an upright font (only useful with --width)",
+)
+parser.add_argument(
+    "--non-cjk",
+    choices=["keep", "remove"],
+    default="keep",
+    help="keep: slant non-CJK glyphs but leave their widths alone; remove: drop them for a pure CJK fallback (default: keep)",
 )
 args = parser.parse_args()
 
@@ -47,21 +53,41 @@ def is_wide(glyph, narrow_width):
     return glyph.width >= 1.5 * narrow_width
 
 
-def normalize_widths(font, narrow_width):
-    """Set narrow glyphs to narrow_width and full-width glyphs to 2x, re-centering ink."""
+def strip_non_cjk(font, narrow_width):
+    """Drop every non-full-width glyph, keeping CJK + the components they reference."""
+    keep = {g.glyphname for g in font.glyphs() if is_wide(g, narrow_width)}
+    keep.add(".notdef")
+    pending = [n for n in keep if n in font]
+    while pending:
+        for ref in font[pending.pop()].references:
+            if ref[0] not in keep:
+                keep.add(ref[0])
+                pending.append(ref[0])
+    for glyph in list(font.glyphs()):
+        if glyph.glyphname not in keep:
+            font.removeGlyph(glyph)
+
+
+def normalize_cjk_widths(font, narrow_width):
+    """Set full-width (CJK) glyphs to 2*narrow_width and re-center their ink.
+
+    Non-CJK glyphs are left exactly as the source font designed them so their
+    proportional spacing is preserved.
+    """
     wide_width = narrow_width * 2
     # Glyphs used as references must not be moved, or their composites would drift.
     referenced = {ref[0] for glyph in font.glyphs() for ref in glyph.references}
     for glyph in font.glyphs():
-        target = wide_width if is_wide(glyph, narrow_width) else narrow_width
+        if not is_wide(glyph, narrow_width):
+            continue
         if glyph.glyphname not in referenced:
             xmin, ymin, xmax, ymax = glyph.boundingBox()
             ink = xmax - xmin
             if ink > 0:
-                dx = round((target - ink) / 2 - xmin)
+                dx = round((wide_width - ink) / 2 - xmin)
                 if dx:
                     glyph.transform((1, 0, 0, 1, dx, 0))
-        glyph.width = target
+        glyph.width = wide_width
 
 
 def set_names(font, family, subfamily, pref_family, pref_styles, fullname, psname):
@@ -101,6 +127,13 @@ def set_names(font, family, subfamily, pref_family, pref_styles, fullname, psnam
 
 font = fontforge.open(args.input)
 
+# is_wide() needs a narrow baseline for ambiguous / unencoded glyphs; when --width
+# is omitted, a full-width CJK advance is ~em, so em//2 is a sound narrow reference.
+narrow_ref = args.width if args.width is not None else font.em // 2
+
+if args.non_cjk == "remove":
+    strip_non_cjk(font, narrow_ref)
+
 slant = not args.no_slant
 
 if slant:
@@ -112,7 +145,7 @@ if slant:
     font.transform((1, 0, slant_factor, 1, 0, 0))
 
 if args.width is not None:
-    normalize_widths(font, args.width)
+    normalize_cjk_widths(font, args.width)
 
 # Preserve the source family + weight grouping; only add the italic style for the
 # slanted variant. The width tag stays in the full/PostScript names (and file name)
@@ -144,9 +177,10 @@ if slant:
 font.generate(args.output)
 detail = f"{slant_degrees}° slant (factor: {slant_factor:.4f})" if slant else "no slant"
 width_note = (
-    f", widths normalized to {args.width}/{args.width * 2}"
-    if args.width is not None
-    else ""
+    f", CJK widths normalized to {args.width * 2}" if args.width is not None else ""
 )
-print(f"Generated {'italic' if slant else 'upright'} font with {detail}{width_note}")
+non_cjk_note = ", non-CJK glyphs removed" if args.non_cjk == "remove" else ""
+print(
+    f"Generated {'italic' if slant else 'upright'} font with {detail}{width_note}{non_cjk_note}"
+)
 font.close()

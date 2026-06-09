@@ -22,7 +22,13 @@ def main():
         "--width",
         type=int,
         default=None,
-        help="Normalize advance widths: narrow glyphs to N, full-width (CJK) glyphs to 2*N",
+        help="Normalize full-width (CJK) advances to 2*N to match a primary mono cell of N; non-CJK glyphs are left unchanged",
+    )
+    parser.add_argument(
+        "--non-cjk",
+        choices=["keep", "remove"],
+        default="keep",
+        help="keep: slant non-CJK glyphs but leave their widths alone; remove: drop them for a pure CJK fallback (default: keep)",
     )
     args = parser.parse_args()
 
@@ -57,7 +63,10 @@ def main():
     print(f"Output: {output_dir.resolve()}")
     print(f"Angle:  {args.angle}°")
     if args.width is not None:
-        print(f"Width:  {args.width} (full-width: {args.width * 2})")
+        print(
+            f"Width:  CJK full-width normalized to {args.width * 2} (cell: {args.width})"
+        )
+    print(f"Non-CJK: {args.non_cjk}")
     print(f"Found {len(ttf_files)} font(s)")
     print()
 
@@ -89,6 +98,8 @@ def main():
                 str(output_file),
                 "--angle",
                 str(args.angle),
+                "--non-cjk",
+                args.non_cjk,
             ]
             if args.width is not None:
                 cmd += ["--width", str(args.width)]
