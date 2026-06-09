@@ -18,6 +18,12 @@ def main():
     parser.add_argument(
         "--angle", type=float, default=9, help="Slant angle in degrees (default: 9)"
     )
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=None,
+        help="Normalize advance widths: narrow glyphs to N, full-width (CJK) glyphs to 2*N",
+    )
     args = parser.parse_args()
 
     input_dir = Path(args.input)
@@ -50,56 +56,72 @@ def main():
     print(f"Input:  {input_dir.resolve()}")
     print(f"Output: {output_dir.resolve()}")
     print(f"Angle:  {args.angle}°")
+    if args.width is not None:
+        print(f"Width:  {args.width} (full-width: {args.width * 2})")
     print(f"Found {len(ttf_files)} font(s)")
     print()
 
     success_count = 0
     fail_count = 0
 
-    for input_file in ttf_files:
-        output_filename = input_file.stem + "-Italic.ttf"
-        output_file = output_dir / output_filename
+    width_tag = f"-W{args.width}" if args.width is not None else ""
 
+    for input_file in ttf_files:
         print(f"Processing: {input_file.name}")
 
-        try:
-            result = subprocess.run(
-                [
-                    "fontforge",
-                    "-script",
-                    str(script_path),
-                    "--input",
-                    str(input_file),
-                    "--output",
-                    str(output_file),
-                    "--angle",
-                    str(args.angle),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
+        # Always generate the slanted italic; when widths are fixed, also emit a
+        # matching upright Regular so both share the same advance-width grid.
+        variants = [("-Italic" + width_tag + ".ttf", [])]
+        if args.width is not None:
+            variants.append((width_tag + ".ttf", ["--no-slant"]))
 
-            if result.returncode == 0:
-                print(f"  ✓ Generated: {output_filename}")
-                if result.stdout.strip():
-                    print(f"    {result.stdout.strip()}")
-                success_count += 1
-            else:
-                print(f"  ✗ Failed: {output_filename}")
-                if result.stderr.strip():
-                    print(f"    Error: {result.stderr.strip()}")
+        for suffix, extra_args in variants:
+            output_filename = input_file.stem + suffix
+            output_file = output_dir / output_filename
+
+            cmd = [
+                "fontforge",
+                "-script",
+                str(script_path),
+                "--input",
+                str(input_file),
+                "--output",
+                str(output_file),
+                "--angle",
+                str(args.angle),
+            ]
+            if args.width is not None:
+                cmd += ["--width", str(args.width)]
+            cmd += extra_args
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+
+                if result.returncode == 0:
+                    print(f"  ✓ Generated: {output_filename}")
+                    if result.stdout.strip():
+                        print(f"    {result.stdout.strip()}")
+                    success_count += 1
+                else:
+                    print(f"  ✗ Failed: {output_filename}")
+                    if result.stderr.strip():
+                        print(f"    Error: {result.stderr.strip()}")
+                    fail_count += 1
+
+            except subprocess.TimeoutExpired:
+                print(f"  ✗ Timeout: {output_filename}")
                 fail_count += 1
-
-        except subprocess.TimeoutExpired:
-            print(f"  ✗ Timeout: {output_filename}")
-            fail_count += 1
-        except FileNotFoundError:
-            print("Error: fontforge command not found. Please install FontForge.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"  ✗ Error: {e}")
-            fail_count += 1
+            except FileNotFoundError:
+                print("Error: fontforge command not found. Please install FontForge.")
+                sys.exit(1)
+            except Exception as e:
+                print(f"  ✗ Error: {e}")
+                fail_count += 1
 
         print()
 
