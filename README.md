@@ -33,7 +33,9 @@ python3 build.py --input ./input --output ./output --angle 12
 (Latin letters, half-width forms) are set to `N`, and full-width glyphs (CJK ideographs,
 kana, fullwidth symbols) are set to `2 * N`. Each glyph's outline is re-centered within its
 new advance box. Narrow vs. full-width is decided by the glyph's Unicode East Asian Width,
-so proportional Latin letters are not mistaken for full-width.
+so proportional Latin letters are not mistaken for full-width. Ambiguous-width symbols
+(arrows, math operators, smart quotes, …) keep whichever width the source font drew them
+at, rather than always being squashed to narrow.
 
 ```bash
 # Latin letters -> 600 units, CJK glyphs -> 1200 units
@@ -43,7 +45,7 @@ python3 build.py --input ./input --output ./output --angle 9 --width 600
 For each input font, a `--width` run produces **two** outputs that share the same width grid —
 an upright `…-W600.ttf` and a slanted `…-Italic-W600.ttf`. Each output keeps the source font's
 family **and weight**, so a whole family (Thin … Bold) stays intact and every weight gains a
-matching italic (Thin → *Thin Italic*, Regular → *Italic*, Bold → *Bold Italic*, …) that pairs
+matching italic (Thin → _Thin Italic_, Regular → _Italic_, Bold → _Bold Italic_, …) that pairs
 with it in font menus. The `W600` tag stays in the full name, PostScript name, and file name to
 keep the normalized fonts distinct from the originals. When `--width` is omitted, only the
 italic is generated, advance widths are left unchanged, and no tag is added.

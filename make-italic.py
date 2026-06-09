@@ -26,14 +26,24 @@ args = parser.parse_args()
 
 
 def is_wide(glyph, narrow_width):
-    """Full-width (CJK) glyphs get the doubled advance; everything else stays narrow."""
+    """Full-width (CJK) glyphs get the doubled advance; everything else stays narrow.
+
+    East-Asian *Ambiguous* glyphs (arrows, math symbols, §, smart quotes, …) are drawn
+    full-width in many CJK fonts but half-width elsewhere, so we trust the source advance
+    for them rather than forcing them narrow and overflowing the box.
+    """
     cp = glyph.unicode
     if cp is not None and cp >= 0:
         try:
-            return unicodedata.east_asian_width(chr(cp)) in ("W", "F")
+            eaw = unicodedata.east_asian_width(chr(cp))
         except ValueError:
-            pass
-    # No usable codepoint (e.g. vertical/alternate forms): fall back to current advance.
+            eaw = None
+        if eaw in ("W", "F"):
+            return True
+        if eaw != "A":  # Na / H / N: definitively narrow
+            return False
+        # "A" (ambiguous): fall through to the source-advance heuristic below.
+    # No usable codepoint, or ambiguous width: fall back to current advance.
     return glyph.width >= 1.5 * narrow_width
 
 
@@ -63,9 +73,16 @@ def set_names(font, family, subfamily, pref_family, pref_styles, fullname, psnam
     is the style shown in font menus. The font's weight is left untouched.
     """
     managed = {
-        "Family", "SubFamily", "UniqueID", "Fullname", "PostScriptName",
-        "Preferred Family", "Preferred Styles", "Compatible Full",
-        "WWS Family", "WWS Subfamily",
+        "Family",
+        "SubFamily",
+        "UniqueID",
+        "Fullname",
+        "PostScriptName",
+        "Preferred Family",
+        "Preferred Styles",
+        "Compatible Full",
+        "WWS Family",
+        "WWS Subfamily",
     }
     lang = "English (US)"
     names = [n for n in font.sfnt_names if n[1] not in managed]
