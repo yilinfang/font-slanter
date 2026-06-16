@@ -4,6 +4,7 @@ import math
 import unicodedata
 
 import fontforge
+import psMat
 
 parser = argparse.ArgumentParser(description="Generate an italic version of a TTF font")
 parser.add_argument("--input", required=True, help="Input TTF file")
@@ -15,7 +16,7 @@ parser.add_argument(
     "--width",
     type=int,
     default=None,
-    help="Normalize full-width (CJK) advances to 2*N to match a primary mono cell of N; non-CJK glyphs are left unchanged",
+    help="Snap CJK glyphs onto a mono grid: full-width advances become 2*N, half-width forms become N; non-CJK glyphs are left unchanged",
 )
 parser.add_argument(
     "--no-slant",
@@ -53,6 +54,24 @@ def is_wide(glyph, narrow_width):
     return glyph.width >= 1.5 * narrow_width
 
 
+def is_cjk(glyph, narrow_width):
+    """Glyphs that should snap to the half/full grid.
+
+    Extends is_wide() (full-width CJK) with the half-width East-Asian forms
+    (e.g. half-width katakana, East-Asian-width "H") so they land on the half
+    cell. Latin and other proportional glyphs are left alone.
+    """
+    if is_wide(glyph, narrow_width):
+        return True
+    cp = glyph.unicode
+    if cp is not None and cp >= 0:
+        try:
+            return unicodedata.east_asian_width(chr(cp)) == "H"
+        except ValueError:
+            pass
+    return False
+
+
 def strip_non_cjk(font, narrow_width):
     """Drop every non-full-width glyph, keeping CJK + the components they reference."""
     keep = {g.glyphname for g in font.glyphs() if is_wide(g, narrow_width)}
@@ -69,25 +88,31 @@ def strip_non_cjk(font, narrow_width):
 
 
 def normalize_cjk_widths(font, narrow_width):
-    """Set full-width (CJK) glyphs to 2*narrow_width and re-center their ink.
+    """Snap CJK glyphs onto the half (N) / full (2N) grid, PlemolJP-style.
 
-    Non-CJK glyphs are left exactly as the source font designed them so their
-    proportional spacing is preserved.
+    Mirrors PlemolJP's set_width_600_or_1000: a CJK glyph narrower than the half
+    cell is centered and grown to narrow_width, a full-width one is centered and
+    grown to 2*narrow_width. Non-CJK glyphs keep their proportional advance.
     """
     wide_width = narrow_width * 2
     # Glyphs used as references must not be moved, or their composites would drift.
     referenced = {ref[0] for glyph in font.glyphs() for ref in glyph.references}
     for glyph in font.glyphs():
-        if not is_wide(glyph, narrow_width):
+        if not is_cjk(glyph, narrow_width):
             continue
+        if 0 < glyph.width < narrow_width:
+            target = narrow_width
+        elif narrow_width < glyph.width < wide_width:
+            target = wide_width
+        else:
+            continue  # already sits on the grid (or wider) — leave it alone
+        # Pad both sides equally so the glyph keeps the placement the source
+        # designed. Centering the *ink* instead would shove intentionally
+        # off-center glyphs (brackets/punctuation like 【】, 。) into the middle
+        # of the cell and break their spacing.
         if glyph.glyphname not in referenced:
-            xmin, ymin, xmax, ymax = glyph.boundingBox()
-            ink = xmax - xmin
-            if ink > 0:
-                dx = round((wide_width - ink) / 2 - xmin)
-                if dx:
-                    glyph.transform((1, 0, 0, 1, dx, 0))
-        glyph.width = wide_width
+            glyph.transform(psMat.translate((target - glyph.width) / 2, 0))
+        glyph.width = target
 
 
 def set_names(font, family, subfamily, pref_family, pref_styles, fullname, psname):
@@ -177,7 +202,9 @@ if slant:
 font.generate(args.output)
 detail = f"{slant_degrees}° slant (factor: {slant_factor:.4f})" if slant else "no slant"
 width_note = (
-    f", CJK widths normalized to {args.width * 2}" if args.width is not None else ""
+    f", CJK widths snapped to {args.width}/{args.width * 2} grid"
+    if args.width is not None
+    else ""
 )
 non_cjk_note = ", non-CJK glyphs removed" if args.non_cjk == "remove" else ""
 print(

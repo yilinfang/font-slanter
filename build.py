@@ -22,7 +22,7 @@ def main():
         "--width",
         type=int,
         default=None,
-        help="Normalize full-width (CJK) advances to 2*N to match a primary mono cell of N; non-CJK glyphs are left unchanged",
+        help="Snap CJK glyphs onto a mono grid: full-width advances become 2*N, half-width forms become N; non-CJK glyphs are left unchanged",
     )
     parser.add_argument(
         "--non-cjk",
